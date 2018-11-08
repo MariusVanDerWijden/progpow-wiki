@@ -176,11 +176,6 @@ KISS99 is currently the random number generator that passes the [TestU01](http:/
 More complex PRNG's can be efficiently implemented in ASIC'S. KISS99 has a period of around 10^37 which is plenty enough for  KISS99 is **not** a cryptographicly secure pseudorandom number generator since it is possible to recalculate the seed after observing several outputs of the function. However this is no problem for us, since the seed is public. We only use KISS99 for its good distribution properties. 
 
 ```python
-z = 362436069;
-w = 521288629;
-jsr = 123456789;
-jcong = 380116160;
-
 def kiss99(z , w, jsr, jcong): 
     z = 36969 * (z & 0xffff) + (z >> 16);
     w = 18000 *  (w & 0xffff) + (w >> 16) ;
@@ -188,7 +183,7 @@ def kiss99(z , w, jsr, jcong):
     jsr ^= (jsr << 17);
     jsr ^= (jsr >> 13);
     jsr ^= (jsr << 5);
-    return ((((z << 16) + w) ^ jcong) + jsr) % 2**32;
+    return ((((z << 16) + w) ^ jcong) + jsr) & 0xffffffff;
 ```
 
 ### Main Loop
@@ -312,6 +307,45 @@ def isprime(x):
          if x % i == 0:
              return False
     return True
+```
+
+### KISS99 Lookup
+
+The default parameters for KISS99
+```python
+
+z = 362436069;
+w = 521288629;
+jsr = 123456789;
+jcong = 380116160;
+```
+
+The following lookup table provides the first 100 results of KISS99 with the default parameters as a seed.
+```python
+
+def get_kiss99():
+    kiss = [];
+    for i in range(100):
+        kiss.append(kiss99());
+    print kiss;
+
+kiss = [3950301152, 1424329448L, 2656635869L, 2682398698L, 903628396L, 
+1153611800L, 56390649L, 1370973434L, 520257718L, 2122453761L, 2554816484L, 
+3895770088L, 3866258017L, 867473115L, 2330321561L, 3738117532L, 739492310L, 
+3356986988L, 4121481619L, 1945114613L, 107859486L, 527334584L, 108036578L, 
+1375747641L, 4197964130L, 49409L, 2038950561L, 2515682904L, 2559331684L, 
+566635747L, 408753308L, 3157003060L, 4018187377L, 2717398973L, 1405081013L, 
+800138346L, 3047868511L, 3003202702L, 3653848159L, 1064816952L, 587144236L, 
+690246849L, 1909269909L, 1983165686L, 3553317884L, 387001780L, 2399255572L, 
+4203030651L, 1518345267L, 2978452866L, 3785987833L, 1826175735L, 536736026L, 
+2458085845L, 151606592L, 1474398657L, 2533916130L, 1799368591L, 2744766718L, 
+338227066L, 1460640986L, 500826146L, 2013747780L, 3671101135L, 211318516L, 
+2636015021L, 4266401009L, 476631299L, 75353176L, 676108647L, 2991494529L, 
+512024433L, 1484872285L, 1702884966L, 2381801348L, 3776410001L, 3839723392L, 
+3537489105L, 4170880493L, 3466523276L, 1855812766L, 1784734245L, 1614734042L, 
+911088043L, 2691407282L, 2533708940L, 2116374786L, 969227938L, 500946894L, 
+1860086243L, 2794734747L, 2034327762L, 572197680L, 523985329L, 2119797904L, 
+712707104L, 2860043282L, 83178705L, 157293271L, 1902702629L]    
 ```
 
 ### Data Sizes
