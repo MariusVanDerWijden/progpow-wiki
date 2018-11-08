@@ -185,6 +185,32 @@ def kiss99(z , w, jsr, jcong):
     jsr ^= (jsr << 5);
     return ((((z << 16) + w) ^ jcong) + jsr) & 0xffffffff;
 ```
+
+### Random math 
+
+ProgPoW includes PROGPOW_CNT_MATH rounds of random math to the main loop. 
+This random math changes every PROGPOW_PERIOD blocks. 
+The following function is used to switch between the math functions. 
+All math functions can be found in the Appendix 
+
+```python
+def random_math(a, b, r):
+    result = {
+        0: lambda a, b : a + b,
+        1: lambda a, b : a * b,
+        2: lambda a, b : (bit64(a * b) >> 32), #mul_hi
+        3: lambda a, b : a if a < b else b,    #min(a,b)
+        4: lambda a, b : rotl(a, b),
+        5: lambda a, b : rotr(a, b),
+        6: lambda a, b : a & b,
+        7: lambda a, b : a | b,
+        8: lambda a, b : a ^ b,
+        9: lambda a, b : clz(a) + clz(b),
+        10: lambda a, b : popcount(a) + popcount(b)
+    }[r](a,b)
+    return result & 0xffffffff;
+```
+
 **TODO everything after this**
 ### Main Loop
 
@@ -307,6 +333,39 @@ def isprime(x):
          if x % i == 0:
              return False
     return True
+```
+
+### Random math 
+
+This functions are used in the random math generation
+
+```python
+def bit64(x):
+    return a & 0xffffffffffffffff;
+    
+def rotl(num, bits):
+    bit = num & (1 << (bits-1))
+    num <<= 1
+    if(bit):
+        num |= 1
+    num &= (2**bits-1)
+    return num
+
+def rotr(num, bits):
+    num &= (2**bits-1)
+    bit = num & 1
+    num >>= 1
+    if(bit):
+        num |= (1 << (bits-1))
+    return num
+    
+def clz(x):
+    if not(x):
+        return 32;
+    return 32 - len('{0:b}'.format(x));
+    
+def popcount(x):
+    return bin(x).count('1')
 ```
 
 ### KISS99 Lookup
