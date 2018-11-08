@@ -49,13 +49,11 @@ MIX_BYTES = 128                   # width of mix
 HASH_BYTES = 64                   # hash length in bytes
 DATASET_PARENTS = 256             # number of parents of each dataset element
 CACHE_ROUNDS = 3                  # number of rounds in cache production
-ACCESSES = 64                     # number of accesses in hashimoto loop
 PROGPOW_PERIOD = 50               # number of blocks after which 
-PROGPOW_DAG_LOADS = 4             # 
-PROGPOW_CACHE_BYTES = 16*1024     # 
-PROGPOW_CNT_DAG = 64
-PROGPOW_CNT_CACHE = 12
-PROGPOW_CNT_MATH = 20
+PROGPOW_CACHE_BYTES = 16*1024     # bytes in the cache set
+PROGPOW_CNT_DAG = 64              # number of dag accesses in the outer loop
+PROGPOW_CNT_CACHE = 12            # number of cache set accesses per loop
+PROGPOW_CNT_MATH = 20             # number of math operations per loop
 ```
 
 ##### A note regarding "SHA3" hashes described in this specification
@@ -63,13 +61,13 @@ PROGPOW_CNT_MATH = 20
 Ethereum's development coincided with the development of the SHA3 standard, and the
 standards process made a late change in the padding of the finalized hash algorithm, so that Ethereum's
 "sha3_256" and "sha3_512" hashes are not standard sha3 hashes, but a variant often referred 
-to as "Keccak-256" and "Keccak-512" in other contexts. See discussion, e.g. [here](https://github.com/ethereum/EIPs/issues/59), [here](http://ethereum.stackexchange.com/questions/550/which-cryptographic-hash-function-does-ethereum-use), or [here](http://bitcoin.stackexchange.com/questions/42055/what-is-the-approach-to-calculate-an-ethereum-address-from-a-256-bit-private-key/42057#42057).
+to as "Keccak-256" and "Keccak-512" in other contexts. See discussion, e.g. [here](https://github.com/ethereum/EIPs/issues/59), [here](http://ethereum.stackexchange.com/questions/550/which-cryptographic-hash-function-does-ethereum-use), or [here](http://bitcoin.stackexchange.com/questions/42055/what-is-the-approach-to-calculate-an-ethereum-address-from-a-256-bit-private-key/42057#42057). In order to improve the overhead of keccak we use keccak-f[800] with 800 bits of security. As of now, there are no known attacks to decrease the security of keccak in a way that threatens the security of keccak-f[800].
 
 Please keep that in mind as "sha3" hashes are referred to in the description of the algorithm below.
 
 ### Parameters
 
-The parameters for Ethash's cache and dataset depend on the block number. The cache size and dataset size both grow linearly; however, we always take the highest prime below the linearly growing threshold in order to reduce the risk of accidental regularities leading to cyclic behavior.
+The parameters for ProgPoW's cache and dataset depend on the block number. The cache size and dataset size both grow linearly; however, we always take the highest prime below the linearly growing threshold in order to reduce the risk of accidental regularities leading to cyclic behavior. The cache set does not grow, it is fixed to PROGPOW_CACHE_BYTES bytes.
 
 ```python
 def get_cache_size(block_number):
@@ -85,6 +83,9 @@ def get_full_size(block_number):
     while not isprime(sz / MIX_BYTES):
         sz -= 2 * MIX_BYTES
     return sz
+
+def get_cache_set_size():
+    return PROGPOW_CACHE_BYTES
 ```
 
 Tables of dataset and cache size values are provided in the appendix.
@@ -154,12 +155,18 @@ def calc_dataset(full_size, cache):
     return [calc_dataset_item(cache, i) for i in range(full_size // HASH_BYTES)]
 ```
 
+The cache_set is generated as the following:
+```python
+def calc_cache_set(cache)
+    return [calc_dataset_item(cache, i) for i in range(PROGPOW_CACHE_BYTES // HASH_BYTES)]]
+```
+
 ### Main Loop
 
 Now, we specify the main "hashimoto"-like loop, where we aggregate data from the full dataset in order to produce our final value for a particular header and nonce. In the code below, `header` represents the SHA3-256 _hash_ of the [RLP](https://github.com/ethereum/wiki/wiki/RLP) representation of a _truncated_ block header, that is, of a header excluding the fields **mixHash** and **nonce**. `nonce` is the eight bytes of a 64 bit unsigned integer in big-endian order. So `nonce[::-1]` is the eight-byte little-endian representation of that value:
 
 ```python
-def hashimoto(header, nonce, full_size, dataset_lookup):
+def progpow(header, nonce, full_size, dataset_lookup):
     n = full_size / HASH_BYTES
     w = MIX_BYTES // WORD_BYTES
     mixhashes = MIX_BYTES / HASH_BYTES
