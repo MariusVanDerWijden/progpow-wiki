@@ -173,7 +173,7 @@ def calc_cache_set(cache):
 
 We use the PRNG KISS99 to generate pseudorandom numbers in our main loop. 
 KISS99 is currently the random number generator that passes the [TestU01](http://simul.iro.umontreal.ca/testu01/tu01.html) testsuite with the fewest instructions.
-More complex PRNG's can be efficiently implemented in ASIC'S. KISS99 has a period of around 10^37 which is plenty enough for  KISS99 is **not** a cryptographicly secure pseudorandom number generator since it is possible to recalculate the seed after observing several outputs of the function. However this is no problem for us, since the seed is public. We only use KISS99 for its good distribution properties. 
+More complex PRNG's can be efficiently implemented in ASIC'S. KISS99 has a period of around 10^37 which is plenty enough for our use-case. KISS99 is **not** a cryptographicly secure pseudorandom number generator since it is possible to recalculate the seed after observing several outputs of the function. However this is no problem for us, since the seed is public. We only use KISS99 for its good distribution properties. 
 
 ```python
 def kiss99(z , w, jsr, jcong): 
@@ -185,7 +185,7 @@ def kiss99(z , w, jsr, jcong):
     jsr ^= (jsr << 5);
     return ((((z << 16) + w) ^ jcong) + jsr) & 0xffffffff;
 ```
-
+**TODO everything after this**
 ### Main Loop
 
 Now, we specify the main "hashimoto"-like loop, where we aggregate data from the full dataset in order to produce our final value for a particular header and nonce. In the code below, `header` represents the SHA3-256 _hash_ of the [RLP](https://github.com/ethereum/wiki/wiki/RLP) representation of a _truncated_ block header, that is, of a header excluding the fields **mixHash** and **nonce**. `nonce` is the eight bytes of a 64 bit unsigned integer in big-endian order. So `nonce[::-1]` is the eight-byte little-endian representation of that value:
