@@ -116,9 +116,9 @@ def mkcache(cache_size, seed):
 
 The cache production process involves first sequentially filling up 32 MB of memory, then performing two passes of Sergio Demian Lerner's *RandMemoHash* algorithm from [*Strict Memory Hard Hashing Functions* (2014)](http://www.hashcash.org/papers/memohash.pdf). The output is a set of 524288 64-byte values.
 
-### Data aggregation function
+### Data aggregation functions
 
-We use an algorithm inspired by the [FNV hash](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function) in some cases as a non-associative substitute for XOR. Note that we multiply the prime with the full 32-bit input, in contrast with the FNV-1 spec which multiplies the prime with one byte (octet) in turn.
+We use an algorithm inspired by the [FNV hash](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function) in some cases as a non-associative substitute for XOR for the generation of the DAG. Note that we multiply the prime with the full 32-bit input, in contrast with the FNV-1 spec which multiplies the prime with one byte (octet) in turn. 
 
 ```python
 FNV_PRIME = 0x01000193
@@ -126,6 +126,15 @@ FNV_PRIME = 0x01000193
 def fnv(v1, v2):
     return ((v1 * FNV_PRIME) ^ v2) % 2**32
 ```
+The FNV-1 spec however has some flaws that can be exploited by ASIC's and FPGA's. This flaw can be used to decrease the amount of computation needed in the main loop. We will continue to use FNV-1 for the DAG generation but use [FNV-1a](http://www.isthe.com/chongo/tech/comp/fnv/index.html#FNV-1a) in the main loop since it has better distribution properties. 
+
+```python
+FNV_PRIME = 0x01000193;
+
+def fnv(v1, v2):
+    return ((v1 ^ v2) * FNV_PRIME)) % 2**32
+```
+
 
 Please note, even the yellow paper specifies fnv as v1*(FNV_PRIME ^ v2), all current implementations consistently use the above definition.
 
@@ -157,8 +166,29 @@ def calc_dataset(full_size, cache):
 
 The cache_set is generated as the following:
 ```python
-def calc_cache_set(cache)
+def calc_cache_set(cache):
     return [calc_dataset_item(cache, i) for i in range(PROGPOW_CACHE_BYTES // HASH_BYTES)]]
+```
+### Pseudorandom Number Generator
+
+We use the PRNG KISS99 to generate pseudorandom numbers in our main loop. 
+KISS99 is currently the random number generator that passes the [TestU01](http://simul.iro.umontreal.ca/testu01/tu01.html) testsuite with the fewest instructions.
+More complex PRNG's can be efficiently implemented in ASIC'S. KISS99 has a period of around 10^37 which is plenty enough for  KISS99 is **not** a cryptographicly secure pseudorandom number generator since it is possible to recalculate the seed after observing several outputs of the function. However this is no problem for us, since the seed is public. We only use KISS99 for its good distribution properties. 
+
+```python
+z = 362436069;
+w = 521288629;
+jsr = 123456789;
+jcong = 380116160;
+
+def kiss99(z , w, jsr, jcong): 
+    z = 36969 * (z & 0xffff) + (z >> 16);
+    w = 18000 *  (w & 0xffff) + (w >> 16) ;
+    jcong = 69069 * jcong + 1234567;
+    jsr ^= (jsr << 17);
+    jsr ^= (jsr >> 13);
+    jsr ^= (jsr << 5);
+    return ((((z << 16) + w) ^ jcong) + jsr) % 2**32;
 ```
 
 ### Main Loop
