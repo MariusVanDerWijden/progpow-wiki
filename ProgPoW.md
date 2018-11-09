@@ -302,9 +302,6 @@ The variable prog_seed is calculated by taking the current block number divided 
 
 ```python
 def progpow(prog_seed, header, nonce, full_size, dataset_lookup):
-    n = full_size / HASH_BYTES
-    w = MIX_BYTES // WORD_BYTES
-    mixhashes = MIX_BYTES / HASH_BYTES
     # combine header+nonce into a 64 byte seed
     s = keccak_f800(header + nonce[::-1])
     # start the mix with replicated s
