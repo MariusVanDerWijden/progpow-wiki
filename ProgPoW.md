@@ -49,6 +49,8 @@ MIX_BYTES = 128                   # width of mix
 HASH_BYTES = 64                   # hash length in bytes
 DATASET_PARENTS = 256             # number of parents of each dataset element
 CACHE_ROUNDS = 3                  # number of rounds in cache production
+PROGPOW_LANES = 16                # number of parallel lanes used to produce one hash
+PROGPOW_REGS = 32                 # size of the mix state 
 PROGPOW_PERIOD = 50               # number of blocks after which 
 PROGPOW_CACHE_BYTES = 16*1024     # bytes in the cache set
 PROGPOW_CNT_DAG = 64              # number of dag accesses in the outer loop
@@ -62,6 +64,7 @@ Ethereum's development coincided with the development of the SHA3 standard, and 
 standards process made a late change in the padding of the finalized hash algorithm, so that Ethereum's
 "sha3_256" and "sha3_512" hashes are not standard sha3 hashes, but a variant often referred 
 to as "Keccak-256" and "Keccak-512" in other contexts. See discussion, e.g. [here](https://github.com/ethereum/EIPs/issues/59), [here](http://ethereum.stackexchange.com/questions/550/which-cryptographic-hash-function-does-ethereum-use), or [here](http://bitcoin.stackexchange.com/questions/42055/what-is-the-approach-to-calculate-an-ethereum-address-from-a-256-bit-private-key/42057#42057). In order to improve the overhead of keccak we use keccak-f[800] with 800 bits of security. As of now, there are no known attacks to decrease the security of keccak in a way that threatens the security of keccak-f[800].
+We use a variant of SHAKE with width=800, bitrate=576, capacity=224, output=256, and without padding. The result of keccak is treated as a 256-bit big-endian number. The MSB of the result is result byte 0.
 
 Please keep that in mind as "sha3" hashes are referred to in the description of the algorithm below.
 
@@ -131,7 +134,7 @@ The FNV-1 spec however has some flaws that can be exploited by ASIC's and FPGA's
 ```python
 FNV_PRIME = 0x01000193;
 
-def fnv(v1, v2):
+def fnv1a(v1, v2):
     return ((v1 ^ v2) * FNV_PRIME)) % 2**32
 ```
 
@@ -183,7 +186,7 @@ def kiss99(z , w, jsr, jcong):
     jsr ^= (jsr << 17);
     jsr ^= (jsr >> 13);
     jsr ^= (jsr << 5);
-    return ((((z << 16) + w) ^ jcong) + jsr) & 0xffffffff;
+    return [z,w,jsr,jcong, ((((z << 16) + w) ^ jcong) + jsr) & 0xffffffff];
 ```
 
 ### Random math 
@@ -225,7 +228,72 @@ def merge(a, b, r):
     }[r](a,b)
     return result & 0xffffffff;
 ```
+### Fill Mix
 
+ProgPoW maintains a mix state that is initialized through the hash of the random seed.
+
+```python
+def fill_mix(seed):
+    mix = [] # [PROGPOW_LANES][PROGPOW_REGS];
+    fnv_hash = 0x811c9dc5;
+    lower = seed & 0xffffffff;
+    upper = bit64(seed) >> 32;
+    z = fnv1a(fnv_hash, lower);
+    w = fnv1a(fnv_hash, upper);
+    for l in range(PROGPOW_LANES):
+        jsr = fnv1a(fnv_hash, l);
+        jcong = fnv1a(fnv_hash, l);
+        for r in range(PROGPOW_REGS):
+            tmp = kiss99(z, w, jsr, jcong);
+            z = tmp[0];
+            w = tmp[1];
+            jsr = tmp[2];
+            jcong = tmp[3];
+            mix.append(tmp[4]);
+    return mix;
+```
+
+### Init
+
+The following function initializes two arrays, the sequence destination and the sequence cache
+
+```python
+def progPowInit(seed): #seed is a 64 bit 
+    PROGPOW_REGS = 16;
+    mix_seq_dst = [];
+    mix_seq_cache = [];
+    fnv_hash = 0x811c9dc5;
+    lower = seed & 0xffffffff;
+    upper = bit64(seed) >> 32;
+    z = fnv1a(fnv_hash, lower);
+    w = fnv1a(fnv_hash, upper);
+    jsr = fnv1a(fnv_hash, lower);
+    jcong = fnv1a(fnv_hash, upper);
+    for i in range(PROGPOW_REGS):
+        mix_seq_dst.append(i);
+        mix_seq_cache.append(i);
+    for i in range(PROGPOW_REGS):
+        result = kiss99(z, w, jsr, jcong);
+        z = result[0];
+        w = result[1];
+        jsr = result[2];
+        jcong = result[3];
+        j = result[4] % (i + 1);
+        tmp = swap(mix_seq_dst[i], mix_seq_dst[j]);
+        mix_seq_dst[i] = tmp[0];
+        mix_seq_dst[j] = tmp[1];
+    
+        result = kiss99(z, w, jsr, jcong);
+        z = result[0];
+        w = result[1];
+        jsr = result[2];
+        jcong = result[3];
+        j = result[4] % (i + 1);
+        tmp2 = swap(mix_seq_cache[i], mix_seq_cache[j]);
+        mix_seq_cache[i] = tmp2[0];
+        mix_seq_cache[j] = tmp2[1];
+    return [mix_seq_dst, mix_seq_cache];
+```
 
 **TODO everything after this**
 ### Main Loop
@@ -349,6 +417,10 @@ def isprime(x):
          if x % i == 0:
              return False
     return True
+
+def swap(x, y):
+    return [y, x];
+
 ```
 
 ### Random math 
