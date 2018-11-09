@@ -210,6 +210,41 @@ def random_math(a, b, r):
     }[r](a,b)
     return result & 0xffffffff;
 ```
+### Merge Operation
+
+The merge operation is also chosen uniformely at random to increase the chip size ASIC manifacturers have to spend in order to create a custom ASIC for ProgPoW.
+The math functions are chosen such that the output remains high entropy even if the second input is of low entropy. We assume that the first input has high entropy.
+
+```python
+def random_math(a, b, r):
+    result = {
+        0: lambda a, b : (a * 33) + b,
+        1: lambda a, b : (a ^ b) * 33,
+        2: lambda a, b : (bit64(a * b) >> 32), #mul_hi
+        3: lambda a, b : a if a < b else b,    #min(a,b)
+        4: lambda a, b : rotl(a, b),
+        5: lambda a, b : rotr(a, b),
+        6: lambda a, b : a & b,
+        7: lambda a, b : a | b,
+        8: lambda a, b : a ^ b,
+        9: lambda a, b : clz(a) + clz(b),
+        10: lambda a, b : popcount(a) + popcount(b)
+    }[r](a,b)
+    return result & 0xffffffff;
+
+    void merge(uint32_t &a, uint32_t b, uint32_t r)
+{
+    switch (r % 4)
+    {
+    case 0: a = (a * 33) + b; break;
+    case 1: a = (a ^ b) * 33; break;
+    case 2: a = ROTL32(a, ((r >> 16) % 32)) ^ b; break;
+    case 3: a = ROTR32(a, ((r >> 16) % 32)) ^ b; break;
+    }
+}
+
+```
+
 
 **TODO everything after this**
 ### Main Loop
