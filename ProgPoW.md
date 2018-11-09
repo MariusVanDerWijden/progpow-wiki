@@ -295,7 +295,6 @@ def progPowInit(seed): #seed is a 64 bit
     return [mix_seq_dst, mix_seq_cache];
 ```
 
-**TODO everything after this**
 ### Main Loop
 
 Now, we specify the main "hashimoto"-like loop, where we aggregate data from the full dataset in order to produce our final value for a particular header and nonce. In the code below, `header` represents the SHA3-256 _hash_ of the [RLP](https://github.com/ethereum/wiki/wiki/RLP) representation of a _truncated_ block header, that is, of a header excluding the fields **mixHash** and **nonce**. `nonce` is the eight bytes of a 64 bit unsigned integer in big-endian order. So `nonce[::-1]` is the eight-byte little-endian representation of that value:
@@ -307,26 +306,30 @@ def progpow(prog_seed, header, nonce, full_size, dataset_lookup):
     w = MIX_BYTES // WORD_BYTES
     mixhashes = MIX_BYTES / HASH_BYTES
     # combine header+nonce into a 64 byte seed
-    s = sha3_512(header + nonce[::-1])
+    s = keccak_f800(header + nonce[::-1])
     # start the mix with replicated s
-    mix = []
-    for _ in range(MIX_BYTES / HASH_BYTES):
-        mix.extend(s)
-    # mix in random dataset nodes
-    for i in range(ACCESSES):
-        p = fnv(i ^ s[0], mix[i % w]) % (n // mixhashes) * mixhashes
-        newdata = []
-        for j in range(MIX_BYTES / HASH_BYTES):
-            newdata.extend(dataset_lookup(p + j))
-        mix = map(fnv, mix, newdata)
-    # compress mix
-    cmix = []
-    for i in range(0, len(mix), 4):
-        cmix.append(fnv(fnv(fnv(mix[i], mix[i+1]), mix[i+2]), mix[i+3]))
-    return {
-        "mix digest": serialize_hash(cmix),
-        "result": serialize_hash(sha3_256(s+cmix))
-    }
+    # invert the byte order of the seed
+    mix = fill_mix(s);
+
+    #execute the randomly generated inner loop
+    for i in range(PROGPOW_CNT_DAG):
+        progPowLoop(prog_seed, i, mix, dag);
+
+    #reduce the mix data to a single result per lane
+    lane_hashes = [];
+    for l in range(PROGPOW_LANES):
+        lane_hashes.append(0x811c9dc5);
+        for i in range(PROGPOW_REGS):
+            fnv1a(lane_hash[l], mix[l * PROGPOW_REGS + i]);
+
+    # compress lane results to single result
+    result = []
+    for i in range(8):
+        result.append(0x811c9dc5);
+    for i in range(PROGPOW_LANES):
+        result[i%8] = fnv1a(result[i%8], lane_hashes[i]);
+
+    return keccak_f800(header, seed, result);
 
 def hashimoto_light(full_size, cache, header, nonce):
     return hashimoto(header, nonce, full_size, lambda x: calc_dataset_item(cache, x))
@@ -334,6 +337,8 @@ def hashimoto_light(full_size, cache, header, nonce):
 def hashimoto_full(full_size, dataset, header, nonce):
     return hashimoto(header, nonce, full_size, lambda x: dataset[x])
 ```
+
+**TODO everything after this**
 
 Essentially, we maintain a "mix" 128 bytes wide, and repeatedly sequentially fetch 128 bytes from the full dataset and use the `fnv` function to combine it with the mix. 128 bytes of sequential access are used so that each round of the algorithm always fetches a full page from RAM, minimizing translation lookaside buffer misses which ASICs would theoretically be able to avoid.
 
