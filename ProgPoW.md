@@ -396,12 +396,13 @@ If the output of this algorithm is below the desired target, then the nonce is v
 The mining algorithm is defined as follows:
 
 ```python
-def mine(prog_seed, dataset, header, difficulty):
+def mine(block_number, dataset, header, difficulty):
     # zero-pad target to compare with hash on the same digit when reversed
     target = zpad(encode_int(2**256 // difficulty), 64)[::-1]
     from random import randint
     nonce = randint(0, 2**64)
-    while hashimoto_full(prog_seed, dataset, header, nonce) > target:
+    prog_seed = block_number / PROGPOW_PERIOD;
+    while progpow_search_full(prog_seed, dataset, header, nonce) > target:
         nonce = (nonce + 1) % 2**64
     return nonce
 ```
