@@ -272,6 +272,7 @@ def progPowInit(seed): #seed is a 64 bit
     for i in range(PROGPOW_REGS):
         mix_seq_dst.append(i);
         mix_seq_cache.append(i);
+    result = [];
     for i in range(PROGPOW_REGS):
         result = kiss99(z, w, jsr, jcong);
         z = result[0];
@@ -292,7 +293,7 @@ def progPowInit(seed): #seed is a 64 bit
         tmp2 = swap(mix_seq_cache[i], mix_seq_cache[j]);
         mix_seq_cache[i] = tmp2[0];
         mix_seq_cache[j] = tmp2[1];
-    return [mix_seq_dst, mix_seq_cache];
+    return [mix_seq_dst, mix_seq_cache, result];
 ```
 
 ### Main Loop
@@ -301,7 +302,8 @@ Now, we specify the main "hashimoto"-like loop, where we aggregate data from the
 The variable prog_seed is calculated by taking the current block number divided by PROGPOW_PERIOD.
 
 ```python
-def progpow(prog_seed, header, nonce, full_size, dataset_lookup):
+def progpow_search(prog_seed, header, nonce, dag):
+
     # combine header+nonce into a 64 byte seed
     s = keccak_f800(header + nonce[::-1])
     # start the mix with replicated s
@@ -328,11 +330,59 @@ def progpow(prog_seed, header, nonce, full_size, dataset_lookup):
 
     return keccak_f800(header, seed, result);
 
-def hashimoto_light(full_size, cache, header, nonce):
-    return hashimoto(header, nonce, full_size, lambda x: calc_dataset_item(cache, x))
+def progPowLoop(prog_seed, loop, mix, dag):
+    offset_g = mix[(loop % PROGPOW_LANES) * PROGPOW_REGS + 0];
+    #32 = sizeof(uint32_t)
+    offset_g = offset_g % (DAG_BYTES / (PROGPOW_LANES*PROGPOW_DAG_LOADS * 32));
+    for l in range(PROGPOW_LANES):
+        data_g = [];
+        for i in range(PROGPOW_DAG_LOADS):
+            index = (offset_g*PROGPOW_LANES + l) * PROGPOW_DAG_LOADS + i;
+            data_g.append(dag[index]);
+        mix_seq_dst = [];
+        mix_seq_cache = [];
+        mix_seq_dst_cnt = 0;
+        mix_seq_cache_cnt = 0;
+        tmp = progPowInit(prog_seed);
+        mix_seq_dst = tmp[0];
+        mix_seq_cache = tmp[1];
+        prog_rnd = tmp[2];
+        _max = max(PROGPOW_CNT_CACHE,PROGPOW_CNT_MATH);
+        for i in range(_max):
+            if i < PROGPOW_CNT_CACHE:
+                mix_cache = mix_seq_cache[mix_seq_cache_cnt % PROGPOW_REGS];
+                mix_seq_cache_cnt = mix_seq_cache_cnt + 1;
+                offset = mix[l * PROGPOW_REGS + mix_cache]; 
+                offset = offset % (PROGPOW_CACHE_BYTES/sizeof(uint32_t));
+                data = dag[offset];
+                mix_dst = mix_seq_dst[mix_seq_dst_cnt % PROGPOW_REGS];
+                mix_seq_dst_cnt = mix_seq_dst_cnt + 1;
+                prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);
+                merge(mix[l * PROGPOW_REGS + mix_dst], data, prog_rnd[4]);
+            elif i < PROGPOW_CNT_MATH:
+                prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);
+                mix_src_1 = prog_rnd[4] % PROGPOW_REGS;
+                prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);
+                mix_src_2 = prog_rnd[4] % PROGPOW_REGS;
+                prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);
+                data = math(mix[l * PROGPOW_REGS + mix_src_1], mix[l * PROGPOW_REGS + mix_src_2], prog_rnd[4]);
+                prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);
+                mix_dst = mix_seq_dst[mix_seq_dst_cnt % PROGPOW_REGS];
+                mix_seq_dst_cnt = mix_seq_dst_cnt + 1;
+                merge(mix[l * PROGPOW_REGS + mix_dst], data, prog_rnd[4]);
+        prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);     
+        merge(mix[l* PROGPOW_REGS + 0], data_g[0], prog_rnd[4]);
+        for i in range(PROGPOW_DAG_LOADS):
+            prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);
+            mix_dst = mix_seq_dst[mix_seq_dst_cnt % PROGPOW_REGS];
+            mix_seq_dst_cnt = mix_seq_dst_cnt + 1;
+            merge(mix[l* PROGPOW_REGS + mix_dst], data_g[i], prog_rnd[4]);
 
-def hashimoto_full(full_size, dataset, header, nonce):
-    return hashimoto(header, nonce, full_size, lambda x: dataset[x])
+def progpow_search_light(prog_seed, cache, header, nonce):
+    return progpow_search(prog_seed, header, nonce, lambda x: calc_dataset_item(cache, x))
+
+def progpow_search_full(prog_seed, dataset, header, nonce):
+    return progpow_search(prog_seed, header, nonce,  lambda x: dataset[x])
 ```
 
 **TODO everything after this**
@@ -346,12 +396,12 @@ If the output of this algorithm is below the desired target, then the nonce is v
 The mining algorithm is defined as follows:
 
 ```python
-def mine(full_size, dataset, header, difficulty):
+def mine(prog_seed, dataset, header, difficulty):
     # zero-pad target to compare with hash on the same digit when reversed
     target = zpad(encode_int(2**256 // difficulty), 64)[::-1]
     from random import randint
     nonce = randint(0, 2**64)
-    while hashimoto_full(full_size, dataset, header, nonce) > target:
+    while hashimoto_full(prog_seed, dataset, header, nonce) > target:
         nonce = (nonce + 1) % 2**64
     return nonce
 ```
