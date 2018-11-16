@@ -385,15 +385,19 @@ def progpow_search_full(prog_seed, dataset, header, nonce):
     return progpow_search(prog_seed, header, nonce,  lambda x: dataset[x])
 ```
 
-**TODO everything after this**
+#The flow of the overall algorithm is as following
 
-Essentially, we maintain a "mix" 128 bytes wide, and repeatedly sequentially fetch 128 bytes from the full dataset and use the `fnv` function to combine it with the mix. 128 bytes of sequential access are used so that each round of the algorithm always fetches a full page from RAM, minimizing translation lookaside buffer misses which ASICs would theoretically be able to avoid.
+At the beginning of the algorithm, we use a keccak to hash header and nonce of the current block to create a seed. 
+We use this seed to generate the initial data for a 512 bytes wide "mix". 
+We repeatedly fetch random loads from the dag and the cache, perform random math on them and use `fnv1a` to combine it to the mix. 256 byte wide sequential accesses are used, which increases the efficiency and reduces the overhead on modern GPU's. 
+After that, we combine the mix into a single 256-bit value again using `fnv1a`. 
+At the end, we use another keccak hash on this single 256-bit value to generate a result.
 
-If the output of this algorithm is below the desired target, then the nonce is valid. Note that the extra application of `sha3_256` at the end ensures that there exists an intermediate nonce which can be provided to prove that at least a small amount of work was done; this quick outer PoW verification can be used for anti-DDoS purposes.  It also serves to provide statistical assurance that the result is an unbiased, 256 bit number.
+If the output of this algorithm is below the desired target, then the nonce is valid. Note that the extra application of `keccak` at the end ensures that there exists an intermediate nonce which can be provided to prove that at least a small amount of work was done; this quick outer PoW verification can be used for anti-DDoS purposes.  It also serves to provide statistical assurance that the result is an unbiased, 256 bit number.
 
 ### Mining
 
-The mining algorithm is defined as follows:
+** The mining algorithm is defined as follows: **
 
 ```python
 def mine(block_number, dataset, header, difficulty):
