@@ -16,7 +16,7 @@
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-**This spec is REVISION 1. Whenever you substantively (ie. not clarifications) update the algorithm, please update the revision number in this sentence. Also, in all implementations please include a spec revision number**
+**This spec is REVISION 0.9.1. Whenever you substantively (ie. not clarifications) update the algorithm, please update the revision number in this sentence. Also, in all implementations please include a spec revision number**
 
 ProgPoW is the new PoW algorithm for Ethereum. It is based on Ethash the current PoW algorithm for Ethereum see [https://github.com/ethereum/wiki/wiki/Ethash](https://github.com/ethereum/wiki/wiki/Ethash). It improves the ASIC resistance of Ethash. However full ASIC resistance is a myth since chip manufacturers can always tune their chips to exceed the hashing capabilities of commodity GPU's. This algorithm should resolve some of the issues of Ethash and lessen the headroom for a speedup that ASIC's can achieve. 
 
@@ -336,8 +336,9 @@ def progPowLoop(prog_seed, loop, mix, dag):
     offset_g = offset_g % (DAG_BYTES / (PROGPOW_LANES*PROGPOW_DAG_LOADS * 32));
     for l in range(PROGPOW_LANES):
         data_g = [];
+        offset_l = offset_g * PROGPOW_LANES + (l ^ loop) % PROGPOW_LANES;
         for i in range(PROGPOW_DAG_LOADS):
-            index = (offset_g*PROGPOW_LANES + l) * PROGPOW_DAG_LOADS + i;
+            index = offset_l * PROGPOW_DAG_LOADS + i;
             data_g.append(dag[index]);
         mix_seq_dst = [];
         mix_seq_cache = [];
