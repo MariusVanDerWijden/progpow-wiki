@@ -385,7 +385,7 @@ def progpow_search_full(prog_seed, dataset, header, nonce):
     return progpow_search(prog_seed, header, nonce,  lambda x: dataset[x])
 ```
 
-#The flow of the overall algorithm is as following
+####The flow of the overall algorithm is as following
 
 At the beginning of the algorithm, we use a keccak to hash header and nonce of the current block to create a seed. 
 We use this seed to generate the initial data for a 512 bytes wide "mix". 
@@ -397,7 +397,7 @@ If the output of this algorithm is below the desired target, then the nonce is v
 
 ### Mining
 
-** The mining algorithm is defined as follows: **
+The mining algorithm is defined as follows:
 
 ```python
 def mine(block_number, dataset, header, difficulty):
