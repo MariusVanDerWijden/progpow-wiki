@@ -332,8 +332,8 @@ def progpow_search(prog_seed, header, nonce, dag):
 
 def progPowLoop(prog_seed, loop, mix, dag):
     offset_g = mix[(loop % PROGPOW_LANES) * PROGPOW_REGS + 0];
-    #32 = sizeof(uint32_t)
-    offset_g = offset_g % (DAG_BYTES / (PROGPOW_LANES*PROGPOW_DAG_LOADS * 32));
+    #4 = sizeof(uint32_t)
+    offset_g = offset_g % (DAG_BYTES / (PROGPOW_LANES*PROGPOW_DAG_LOADS * 4));
     for l in range(PROGPOW_LANES):
         data_g = [];
         offset_l = offset_g * PROGPOW_LANES + (l ^ loop) % PROGPOW_LANES;
@@ -354,7 +354,7 @@ def progPowLoop(prog_seed, loop, mix, dag):
                 mix_cache = mix_seq_cache[mix_seq_cache_cnt % PROGPOW_REGS];
                 mix_seq_cache_cnt = mix_seq_cache_cnt + 1;
                 offset = mix[l * PROGPOW_REGS + mix_cache]; 
-                offset = offset % (PROGPOW_CACHE_BYTES/sizeof(uint32_t));
+                offset = offset % (PROGPOW_CACHE_BYTES / 4);
                 data = dag[offset];
                 mix_dst = mix_seq_dst[mix_seq_dst_cnt % PROGPOW_REGS];
                 mix_seq_dst_cnt = mix_seq_dst_cnt + 1;
@@ -373,7 +373,7 @@ def progPowLoop(prog_seed, loop, mix, dag):
                 merge(mix[l * PROGPOW_REGS + mix_dst], data, prog_rnd[4]);
         prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);     
         merge(mix[l* PROGPOW_REGS + 0], data_g[0], prog_rnd[4]);
-        for i in range(PROGPOW_DAG_LOADS):
+        for i in range(1, PROGPOW_DAG_LOADS):
             prog_rnd = kiss99(prog_rnd[0], prog_rnd[1], prog_rnd[2], prog_rnd[3]);
             mix_dst = mix_seq_dst[mix_seq_dst_cnt % PROGPOW_REGS];
             mix_seq_dst_cnt = mix_seq_dst_cnt + 1;
